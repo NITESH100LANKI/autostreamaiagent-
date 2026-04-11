@@ -1,0 +1,73 @@
+{
+  "pricing": [
+    {
+      "plan": "Basic",
+      "price": "$29/month",
+      "videos": 10,
+      "resolution": "720p",
+      "storage": "20 GB",
+      "support": "Email support (48h response)",
+      "export_formats": ["MP4", "MOV"],
+      "watermark": false
+    },
+    {
+      "plan": "Pro",
+      "price": "$79/month",
+      "videos": "unlimited",
+      "resolution": "4K",
+      "captions": "AI captions (15+ languages)",
+      "storage": "500 GB",
+      "support": "24/7 priority support",
+      "export_formats": ["MP4", "MOV", "AVI", "WebM"],
+      "watermark": false,
+      "analytics": "Advanced video analytics dashboard",
+      "collaboration": "Up to 5 team members"
+    },
+    {
+      "plan": "Enterprise",
+      "price": "Custom pricing",
+      "videos": "unlimited",
+      "resolution": "8K",
+      "captions": "AI captions (50+ languages)",
+      "storage": "Unlimited",
+      "support": "Dedicated account manager",
+      "export_formats": ["All formats"],
+      "watermark": false,
+      "analytics": "Custom analytics & API access",
+      "collaboration": "Unlimited team members",
+      "sso": true,
+      "custom_branding": true
+    }
+  ],
+  "policies": [
+    "No refunds after 7 days of purchase.",
+    "24/7 customer support is available only for Pro and Enterprise plan customers.",
+    "You can cancel your subscription at any time; access continues until the end of the billing period.",
+    "AutoStream offers a 14-day free trial for the Pro plan — no credit card required.",
+    "Annual plans come with a 20% discount compared to monthly billing.",
+    "Data is stored securely on AWS with AES-256 encryption.",
+    "Unused video exports do not roll over to the next month on the Basic plan."
+  ],
+  "faq": [
+    {
+      "question": "Can I switch between plans?",
+      "answer": "Yes, you can upgrade or downgrade your plan at any time from your account settings. Changes take effect on the next billing cycle."
+    },
+    {
+      "question": "Does AutoStream support team collaboration?",
+      "answer": "Pro plan supports up to 5 team members. Enterprise plan supports unlimited collaborators."
+    },
+    {
+      "question": "What video formats does AutoStream support for import?",
+      "answer": "AutoStream supports MP4, MOV, AVI, MKV, and WebM for import on all plans."
+    },
+    {
+      "question": "Is there a free trial?",
+      "answer": "Yes! We offer a 14-day free trial for the Pro plan with no credit card required."
+    },
+    {
+      "question": "Which social platforms does AutoStream publish to directly?",
+      "answer": "AutoStream supports direct publishing to YouTube, Instagram, TikTok, and Facebook."
+    }
+  ]
+}

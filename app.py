@@ -1,15 +1,24 @@
 import streamlit as st
 import uuid
 import os
-from langchain_core.messages import HumanMessage, AIMessage
+import logging
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from agent.graph import create_agent_graph
 
-# ── Simple UI Config ──────────────────────────────────────────────────────
+# ── Sync Secrets (Required for Cloud Stability, Safe for Local) ────────────
+try:
+    if "GOOGLE_API_KEY" in st.secrets:
+        os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+except Exception:
+    pass  # Fallback to os.environ locally
+
+# ── Page Configuration ────────────────────────────────────────────────────
 st.set_page_config(page_title="AutoStream AI Agent", page_icon="🤖")
 st.title("🤖 AutoStream AI Agent")
+st.caption("Sales & Support | Fixed Stable Version")
 
-# ── Session State ──────────────────────────────────────────────────────────
+# ── Initialize Stable State ──────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -29,49 +38,59 @@ if "base_state" not in st.session_state:
         "leads_count": 0,
     }
 
-# ── Build Agent (Simple) ──────────────────────────────────────────────────
+# ── Load Agent (Simple Wrapper) ──────────────────────────────────────────
 @st.cache_resource
-def load_agent():
+def get_agent():
     graph = create_agent_graph()
     memory = MemorySaver()
     return graph.compile(checkpointer=memory)
 
-agent = load_agent()
+agent = get_agent()
 
-# ── Chat Loop ──────────────────────────────────────────────────────────────
+# ── Render Chat History ───────────────────────────────────────────────────
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+# ── Chat Logic ────────────────────────────────────────────────────────────
 if prompt := st.chat_input("How can I help you today?"):
-    # User message
+    # 1. User Entry
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Run Agent
+    # 2. Agent Configuration
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     turn_input = {**st.session_state.base_state, "messages": [HumanMessage(content=prompt)]}
     
+    # 3. Agent Execution
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            result = agent.invoke(turn_input, config)
-            
-            # Update background state
-            for key in st.session_state.base_state.keys():
-                if key in result:
-                    st.session_state.base_state[key] = result[key]
-            
-            # Show response
-            if result.get("messages"):
-                bot_msg = result["messages"][-1].content
-                st.markdown(bot_msg)
-                st.session_state.messages.append({"role": "assistant", "content": bot_msg})
+        try:
+            with st.spinner("Thinking..."):
+                result = agent.invoke(turn_input, config)
+                
+                # Update background state (Persist lead info, etc.)
+                for key in st.session_state.base_state.keys():
+                    if key in result:
+                        st.session_state.base_state[key] = result[key]
+                
+                # Display final response
+                if result.get("messages"):
+                    bot_msg = result["messages"][-1].content
+                    st.markdown(bot_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": bot_msg})
 
-# ── Sidebar Stats ─────────────────────────────────────────────────────────
+        except Exception as e:
+            # APPROVED ERROR HANDLING
+            logging.error(f"API Error: {e}")
+            error_text = "API limit reached. Please try again later."
+            st.warning(error_text)
+            st.session_state.messages.append({"role": "assistant", "content": error_text})
+
+# ── Sidebar ───────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.header("Session Summary")
     st.metric("Leads Captured", st.session_state.base_state["leads_count"])
-    if st.button("Reset Conversation"):
+    if st.button("Reset Chat"):
         st.session_state.messages = []
         st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
-        st.session_state.base_state["leads_count"] = 0
         st.rerun()

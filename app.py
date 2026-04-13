@@ -1,6 +1,7 @@
 import streamlit as st
 import uuid
 import os
+import time
 import logging
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
@@ -13,12 +14,25 @@ try:
 except Exception:
     pass  # Fallback to os.environ locally
 
-# ── Page Configuration ────────────────────────────────────────────────────
-st.set_page_config(page_title="AutoStream AI Agent", page_icon="🤖")
-st.title("🤖 AutoStream AI Agent")
-st.caption("Sales & Support | Fixed Stable Version")
+# ── Page Configuration & Polish ───────────────────────────────────────────
+st.set_page_config(page_title="AutoStream AI Agent", page_icon="🤖", layout="centered")
 
-# ── Initialize Stable State ──────────────────────────────────────────────
+# Header Section
+st.title("🤖 AutoStream AI Agent")
+st.markdown("#### *Fast • Reliable • Zero Hallucination*")
+st.caption("Pro-grade Sales & Support Intelligence")
+
+# ── 1. CACHE GRAPH (STABLE) ──────────────────────────────────────────────
+@st.cache_resource
+def get_graph():
+    """Build and compile the graph once and reuse across sessions."""
+    uncompiled_graph = create_agent_graph()
+    memory = MemorySaver()
+    return uncompiled_graph.compile(checkpointer=memory)
+
+graph = get_graph()
+
+# ── 2. SESSION STATE MEMORY ──────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -38,59 +52,77 @@ if "base_state" not in st.session_state:
         "leads_count": 0,
     }
 
-# ── Load Agent (Simple Wrapper) ──────────────────────────────────────────
-@st.cache_resource
-def get_agent():
-    graph = create_agent_graph()
-    memory = MemorySaver()
-    return graph.compile(checkpointer=memory)
+# ── 3. CHAT INTERFACE ─────────────────────────────────────────────────────
+st.divider()
 
-agent = get_agent()
-
-# ── Render Chat History ───────────────────────────────────────────────────
+# Rendering History (Lazy & Minimal)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        st.write(msg["content"])
 
-# ── Chat Logic ────────────────────────────────────────────────────────────
-if prompt := st.chat_input("How can I help you today?"):
-    # 1. User Entry
-    st.chat_message("user").markdown(prompt)
+# ── 4. AGENT EXECUTION (INPUT DRIVEN ONLY) ────────────────────────────────
+if prompt := st.chat_input("How can I help you?"):
+    # User Input Entry
+    st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # 2. Agent Configuration
+    # Prepare turn input
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     turn_input = {**st.session_state.base_state, "messages": [HumanMessage(content=prompt)]}
     
-    # 3. Agent Execution
+    # Assistant Logic
     with st.chat_message("assistant"):
+        placeholder = st.empty()
         try:
             with st.spinner("Thinking..."):
-                result = agent.invoke(turn_input, config)
+                # INVOKE GRAPH (Single call per input)
+                result = graph.invoke(turn_input, config)
                 
-                # Update background state (Persist lead info, etc.)
-                for key in st.session_state.base_state.keys():
-                    if key in result:
-                        st.session_state.base_state[key] = result[key]
+                # Optimized State Sync
+                st.session_state.base_state.update({
+                    k: result[k] for k in st.session_state.base_state if k in result
+                })
                 
-                # Display final response
+                # Typing Effect & Result Display
                 if result.get("messages"):
                     bot_msg = result["messages"][-1].content
-                    st.markdown(bot_msg)
+                    
+                    # Simulated Typing Stream for UX Polish
+                    full_response = ""
+                    for word in bot_msg.split(' '):
+                        full_response += word + " "
+                        placeholder.write(full_response + "▌")
+                        time.sleep(0.015) # Faster, smoother pace
+                    
+                    placeholder.write(bot_msg) # Final clean output without cursor
                     st.session_state.messages.append({"role": "assistant", "content": bot_msg})
 
         except Exception as e:
-            # APPROVED ERROR HANDLING
-            logging.error(f"API Error: {e}")
+            logging.error(f"Execution Error: {e}")
             error_text = "API limit reached. Please try again later."
-            st.warning(error_text)
+            placeholder.warning(error_text)
             st.session_state.messages.append({"role": "assistant", "content": error_text})
 
-# ── Sidebar ───────────────────────────────────────────────────────────────
+# ── 5. FOOTER & SIDEBAR ───────────────────────────────────────────────────
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: grey; font-size: 0.8em;'>"
+    "Built with LangGraph + Gemini | stable-v1.2"
+    "</div>", 
+    unsafe_allow_html=True
+)
+
 with st.sidebar:
     st.header("Session Summary")
     st.metric("Leads Captured", st.session_state.base_state["leads_count"])
-    if st.button("Reset Chat"):
+    st.info("Agent strictly uses retrieved knowledge for pricing.")
+    
+    if st.button("Reset Chat Session"):
         st.session_state.messages = []
-        st.session_state.thread_id = f"web-{uuid.uuid4().hex[:8]}"
+        st.session_state.thread_id = f"web-refreshed-{uuid.uuid4().hex[:8]}"
+        st.session_state.base_state = {
+            "intent": "", "intent_confidence": 0.0, "lead_active": False,
+            "lead_name": "", "lead_email": "", "lead_platform": "",
+            "lead_captured": False, "retrieved_info": "", "leads_count": 0,
+        }
         st.rerun()

@@ -125,25 +125,71 @@ if prompt := st.chat_input("Message AutoStream..."):
         "messages": [HumanMessage(content=prompt)]
     }
 
-    # 4. Invoke agent
+    # 4. Invoke agent with Streaming
     try:
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                result = st.session_state.compiled_agent.invoke(turn_input, config)
+            # We'll use a placeholder for chunks and a container for the stream
+            response_placeholder = st.empty()
+            full_response = ""
+            
+            # Helper to run async generator in sync streamlit
+            import asyncio
+
+            async def get_agent_tokens():
+                has_streamed_any = False
+                async for event in st.session_state.compiled_agent.astream_events(turn_input, config, version="v2"):
+                    # 1. Capture tokens from ResponseGenerator
+                    if event["event"] == "on_llm_stream":
+                        node = event.get("metadata", {}).get("langgraph_node")
+                        # Only stream tokens from the actual response generator
+                        if node == "ResponseGenerator":
+                            chunk = event["data"]["chunk"]
+                            token = chunk.content if hasattr(chunk, "content") else str(chunk)
+                            if token:
+                                has_streamed_any = True
+                                yield token
                 
-                # Update persistent fields in base_state
-                for key in st.session_state.base_state.keys():
-                    if key in result:
-                        st.session_state.base_state[key] = result[key]
-                
-                # Get the last message from the assistant
-                reply_msgs = result.get("messages", [])
-                if reply_msgs:
-                    bot_response = reply_msgs[-1].content
-                    st.markdown(bot_response)
-                    st.session_state.messages.append({"role": "assistant", "content": bot_response})
-                else:
-                    st.warning("Agent produced no response.")
+                # 2. If no tokens were streamed (e.g. Lead Collector rule-based msg),
+                # we fetch the final state message.
+                if not has_streamed_any:
+                    final_state = st.session_state.compiled_agent.get_state(config)
+                    messages = final_state.values.get("messages", [])
+                    if messages:
+                        yield messages[-1].content
+
+            # Define the generator for st.write_stream
+            def stream_wrapper():
+                loop = asyncio.new_event_loop()
+                async_gen = get_agent_tokens()
+                while True:
+                    try:
+                        token = loop.run_until_complete(async_gen.__anext__())
+                        yield token
+                    except StopAsyncIteration:
+                        break
+                    except Exception as e:
+                        logger.error(f"Streaming error chunk: {e}")
+                        break
+                loop.close()
+
+            # Execute the stream
+            full_response = st.write_stream(stream_wrapper)
+            
+            # 5. Final State Sync (Update lead fields, etc.)
+            # After stream ends, we pull the final computed state
+            final_snapshot = st.session_state.compiled_agent.get_state(config)
+            result = final_snapshot.values
+            
+            # Update persistent fields in base_state
+            for key in st.session_state.base_state.keys():
+                if key in result:
+                    st.session_state.base_state[key] = result[key]
+            
+            # Add to history
+            if full_response:
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+            else:
+                st.warning("Agent produced no response.")
 
     except Exception as e:
         error_msg = str(e)

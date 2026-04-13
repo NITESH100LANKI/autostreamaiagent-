@@ -206,9 +206,8 @@ def response_generator(state: AgentState) -> dict:
             
             # STEP 1: Attempt grounded LLM response
             prompt = _GROUNDED_PROMPT.format(retrieved_docs=context, user_input=user_input)
-            res_text = ""
-            for chunk in _get_llm().stream([HumanMessage(content=prompt)]):
-                res_text += _get_content_str(chunk.content)
+            response = _get_llm().invoke([HumanMessage(content=prompt)])
+            res_text = _get_content_str(response.content)
             
             # STEP 3 & 5: STRICT SAFETY CHECK
             missing_major_prices = "$29" not in res_text or "$79" not in res_text
@@ -221,10 +220,8 @@ def response_generator(state: AgentState) -> dict:
             return {"messages": [AIMessage(content=res_text)]}
 
         sys_msg = "Friendly AutoStream assistant." if intent == "greeting" else "Help concisely."
-        res_text = ""
-        for chunk in _get_llm().stream([SystemMessage(content=sys_msg)] + state["messages"][-6:]):
-            res_text += _get_content_str(chunk.content)
-        return {"messages": [AIMessage(content=res_text)]}
+        response = _get_llm().invoke([SystemMessage(content=sys_msg)] + state["messages"][-6:])
+        return {"messages": [AIMessage(content=_get_content_str(response.content))]}
     except Exception as e:
         logger.error("Response failed: %s", e)
-        return {"messages": [AIMessage(content=f"⚠️ Service error: {str(e)} | Backing Up: Basic $29/mo, Pro $79/mo.")]}
+        return {"messages": [AIMessage(content="Pricing: Basic $29/mo, Pro $79/mo.")]}

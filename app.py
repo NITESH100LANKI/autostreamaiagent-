@@ -6,7 +6,12 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from agent.graph import create_agent_graph
 
-# ── Logging Setup ──────────────────────────────────────────────────────────
+import logging
+
+# ── Sync Secrets with Environment (Critical for Cloud Deployment) ──────────
+if "GOOGLE_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
